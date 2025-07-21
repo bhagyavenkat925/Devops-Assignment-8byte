@@ -65,10 +65,10 @@ jobs:
           docker push bhagya925/app:stable
 
   scan:
-  name: Vulnerability Scan
-  needs: build-and-push
-  runs-on: ubuntu-latest
-  steps:
+   name: Vulnerability Scan
+   needs: build-and-push
+   runs-on: ubuntu-latest
+   steps:
     - name: Scan Docker Image
       uses: aquasecurity/trivy-action@v0.28.0
       with:
