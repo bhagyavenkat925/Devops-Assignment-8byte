@@ -1,0 +1,104 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: ✅ Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Run Unit Tests
+        run: |
+          cd app
+          npm install
+          npm test
+
+  build-and-push:
+    name: 🐳 Build & Push Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Tag Image
+        run: |
+          cd app
+          docker build -t bhagyashree/app:${{ github.sha }} .
+
+      - name: Push Image
+        run: |
+          docker push bhagyashree/app:${{ github.sha }}
+
+  deploy-staging:
+    name: 🚀 Deploy to Staging EC2
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            docker pull bhagyashree/app:${{ github.sha }}
+            docker stop myapp || true
+            docker rm myapp || true
+            docker run -d -p 80:80 --name myapp bhagyashree/app:${{ github.sha }}
+
+  approve-prod:
+    name: ⏸️ Manual Approval for Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: http://your-production-url.com
+    steps:
+      - name: Wait for Manual Approval
+        uses: hmarr/auto-approve-action@v2.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to Production
+        run: echo "Production deploy logic here — e.g., tag release, notify team"
+
+  scan:
+    name: 🔍 Vulnerability Scan
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan Docker Image
+        uses: aquasecurity/trivy-action@v0.10.0
+        with:
+          image-ref: bhagyashree/app:${{ github.sha }}
+
+  notify:
+    name: 🔔 Failure Notification
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack Notify
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
