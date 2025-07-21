@@ -72,7 +72,7 @@ jobs:
       - name: Scan Docker Image
         uses: aquasecurity/trivy-action@v0.10.0
         with:
-          image-ref: bhagyashree/app:${{ env.COMMIT_SHA }}
+          image-ref: bhagya925/app:${{ env.COMMIT_SHA }}
 
   deploy-staging:
     name: Deploy to Staging EC2
@@ -86,7 +86,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_KEY }}
           script: |
-            docker pull bhagyashree/app:${{ env.COMMIT_SHA }}
+            docker pull bhagya925/app:${{ env.COMMIT_SHA }}
             docker stop myapp || true
             docker rm myapp || true
             docker run -d -p 80:80 \
@@ -94,7 +94,7 @@ jobs:
               -e PORT=80 \
               -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
               -e API_KEY=${{ secrets.API_KEY }} \
-              --name myapp bhagyashree/app:${{ env.COMMIT_SHA }}
+              --name myapp bhagya925/app:${{ env.COMMIT_SHA }}
 
   approve-prod:
     name: ⏸ Manual Approval for Production
