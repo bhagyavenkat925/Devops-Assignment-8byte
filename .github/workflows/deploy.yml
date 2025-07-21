@@ -64,7 +64,7 @@ jobs:
           docker push bhagya925/app:${{ env.COMMIT_SHA }}
           docker push bhagya925/app:stable
 
- scan:
+  scan:
   name: Vulnerability Scan
   needs: build-and-push
   runs-on: ubuntu-latest
