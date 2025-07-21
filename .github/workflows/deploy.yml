@@ -56,13 +56,13 @@ jobs:
       - name: Build & Tag Image
         run: |
           cd app
-          docker build -t bhagyashree/app:${{ env.COMMIT_SHA }} .
-          docker tag bhagyashree/app:${{ env.COMMIT_SHA }} bhagyashree/app:stable
+          docker build -t bhagya925/app:${{ env.COMMIT_SHA }} .
+          docker tag bhagya925/app:${{ env.COMMIT_SHA }} bhagya925/app:stable
 
       - name: Push Image
         run: |
-          docker push bhagyashree/app:${{ env.COMMIT_SHA }}
-          docker push bhagyashree/app:stable
+          docker push bhagya925/app:${{ env.COMMIT_SHA }}
+          docker push bhagya925/app:stable
 
   scan:
     name: Vulnerability Scan
