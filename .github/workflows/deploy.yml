@@ -1,14 +1,28 @@
 name: CI/CD Pipeline
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to production?'
+        required: true
+        default: 'no'
+        type: choice
+        options:
+          - yes
+          - no
+
+env:
+  COMMIT_SHA: ${{ github.sha }}
 
 jobs:
+
   test:
-    name: ✅ Run Tests
+    name: Run Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -26,7 +40,7 @@ jobs:
           npm test
 
   build-and-push:
-    name: 🐳 Build & Push Docker Image
+    name: Build & Push Docker Image
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -42,14 +56,26 @@ jobs:
       - name: Build & Tag Image
         run: |
           cd app
-          docker build -t bhagyashree/app:${{ github.sha }} .
+          docker build -t bhagyashree/app:${{ env.COMMIT_SHA }} .
+          docker tag bhagyashree/app:${{ env.COMMIT_SHA }} bhagyashree/app:stable
 
       - name: Push Image
         run: |
-          docker push bhagyashree/app:${{ github.sha }}
+          docker push bhagyashree/app:${{ env.COMMIT_SHA }}
+          docker push bhagyashree/app:stable
+
+  scan:
+    name: Vulnerability Scan
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan Docker Image
+        uses: aquasecurity/trivy-action@v0.10.0
+        with:
+          image-ref: bhagyashree/app:${{ env.COMMIT_SHA }}
 
   deploy-staging:
-    name: 🚀 Deploy to Staging EC2
+    name: Deploy to Staging EC2
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
@@ -60,45 +86,50 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_KEY }}
           script: |
-            docker pull bhagyashree/app:${{ github.sha }}
+            docker pull bhagyashree/app:${{ env.COMMIT_SHA }}
             docker stop myapp || true
             docker rm myapp || true
-            docker run -d -p 80:80 --name myapp bhagyashree/app:${{ github.sha }}
+            docker run -d -p 80:80 \
+              -e NODE_ENV=production \
+              -e PORT=80 \
+              -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+              -e API_KEY=${{ secrets.API_KEY }} \
+              --name myapp bhagyashree/app:${{ env.COMMIT_SHA }}
 
   approve-prod:
-    name: ⏸️ Manual Approval for Production
+    name: ⏸ Manual Approval for Production
     needs: deploy-staging
+    if: ${{ github.event.inputs.deploy == 'yes' }}
     runs-on: ubuntu-latest
     environment:
       name: production
       url: http://your-production-url.com
     steps:
-      - name: Wait for Manual Approval
-        uses: hmarr/auto-approve-action@v2.0.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Manual Approval Step
+        run: echo "Production approved, proceeding."
 
-      - name: Deploy to Production
-        run: echo "Production deploy logic here — e.g., tag release, notify team"
+      - name: Deploy to Production (placeholder)
+        run: echo "Add production deployment logic here"
 
-  scan:
-    name: 🔍 Vulnerability Scan
-    needs: build-and-push
+  post-deploy:
+    name: Post Deployment Cleanup
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Scan Docker Image
-        uses: aquasecurity/trivy-action@v0.10.0
-        with:
-          image-ref: bhagyashree/app:${{ github.sha }}
+      - name: Cleanup Docker
+        run: |
+          docker image prune -f
+          docker container prune -f
 
   notify:
-    name: 🔔 Failure Notification
+    name: Failure Notification
     if: failure()
     runs-on: ubuntu-latest
     steps:
-      - name: Slack Notify
+      - name: Slack Failure Alert
         uses: 8398a7/action-slack@v3
         with:
           status: failure
+          fields: repo,message,commit,author
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
